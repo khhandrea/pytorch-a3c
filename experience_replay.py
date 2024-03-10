@@ -1,24 +1,31 @@
 import numpy as np
+from torch import tensor
 
 class OnPolicyExperienceReplay():
     def __init__(self):
         self._size = 0
-        self._replay_keys = ['states', 'actions', 'rewards', 'next_states', 'dones']
+        self._keys = ['states', 'actions', 'rewards', 'next_states', 'dones']
         self._reset()
 
     def _reset(self):
-        for k in self._replay_keys:
+        for k in self._keys:
             setattr(self, k, [])
         self._size = 0
 
     def add_experience(self, state, action, reward, next_state, done):
         most_recent = (state, action, reward, next_state, done)
-        for idx, k in enumerate(self._replay_keys):
-            getattr(self, k).append(most_recent[idx])
+        for idx, key in enumerate(self._keys):
+            getattr(self, key).append(most_recent[idx])
         self._size += 1
 
     def sample(self):
-        batch = {k: np.array(getattr(self, k)) for k in self._replay_keys}
+        batch = {}
+        for key in self._keys:
+            if key == 'dones':
+                setattr(self, key, np.array((getattr(self, key)), dtype=np.float32))
+
+            batch[key] = tensor(np.array(getattr(self, key)))
+
         self._reset()
         return batch
 

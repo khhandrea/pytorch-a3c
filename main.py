@@ -3,8 +3,8 @@ import multiprocessing as mp
 from network import ActorCriticNetwork
 from train import train
 
-STEP_MAX = 10000
-BATCH_SIZE = 100
+STEP_MAX = 1000000
+BATCH_SIZE = 128
 CPU_NUM = mp.cpu_count()
 
 if __name__ == '__main__':

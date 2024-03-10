@@ -20,6 +20,8 @@ class A3C:
         self._local_network = ActorCriticNetwork()
         self._optimizer = optim.SGD(self._global_network.parameters(), lr=LEARNING_RATE)
         self._mse_loss = nn.MSELoss()
+        self._gamma = GAMMA
+        self._lambda = LAMBDA
 
     def get_action(self, observation: np.ndarray):
         observation_tensor = tensor(observation).view(1, -1)
@@ -28,41 +30,41 @@ class A3C:
         action = distribution.sample()
 
         return action.numpy()
-    
-    def _get_gae_advantages(self, rewards, dones, v_preds, gamma, lam):
-        T = len(rewards)
-        gaes = torch.zeros_like(rewards)
-        future_gae = tensor(0.0, dtype=float)
-        not_dones = 1 - dones
-        for t in reversed(range(T)):
-            delta = rewards[t] + not_dones[t] * gamma * v_preds[t + 1] - v_preds[t]
-            gaes[t] = future_gae = delta + gamma * lam * not_dones[t] * future_gae
-        return gaes.view(-1, 1)
 
-    def sync_network(self, global_network):
-        self._local_network.load_state_dict(global_network.state_dict())
+    def _get_gaes_v_targets(self, batch, v_preds):
+        last_next_state = batch['next_states'][-1:]
+        with torch.no_grad():
+            _, last_v_pred = self._local_network(last_next_state)
+        v_preds = v_preds.detach()
+
+        v_preds_all = torch.cat((v_preds, last_v_pred), dim=0)
+
+        T = len(batch['rewards'])
+        gaes = torch.zeros_like(batch['rewards'], dtype=torch.float32)
+        future_gae = tensor(0.0, dtype=torch.float32)
+        not_dones = 1 - batch['dones']
+        for t in reversed(range(T)):
+            delta = batch['rewards'][t] + not_dones[t] * self._gamma * v_preds_all[t + 1] - v_preds_all[t]
+            gaes[t] = future_gae = delta + self._gamma * self._lambda * not_dones[t] * future_gae
+
+        v_targets = gaes.view(-1, 1) + v_preds
+
+        # Standardize
+        if len(gaes) > 1:
+            gaes = torch.squeeze((gaes - gaes.mean()) / (gaes.std() + 1e-8))
+
+        return gaes, v_targets
 
     def train(self):
         batch = self.replay.sample()
 
-        states_tensor = tensor(batch['states'])
-        actions_tensor = tensor(batch['actions'])
-        rewards_tensor = tensor(batch['rewards'])
-        last_next_state_tensor = tensor(batch['next_states'][-1:])
-        dones_tensor = tensor([1 if done else 0 for done in batch['dones']])
-        states_tensor = torch.cat((states_tensor, last_next_state_tensor), dim=0)
-
-        policies, values = self._local_network(states_tensor)
-        policies = policies[:-1]
+        policies, v_preds = self._local_network(batch['states'])
         distributions = Categorical(policies)
-        log_probs = distributions.log_prob(actions_tensor)
+        log_probs = distributions.log_prob(batch['actions'])
+        gaes, v_targets = self._get_gaes_v_targets(batch, v_preds)
 
-        values = values.detach()
-        advantages = self._get_gae_advantages(rewards_tensor, dones_tensor, values, GAMMA, LAMBDA)
-
-        standardized_adv = torch.squeeze((advantages - advantages.mean()) / (advantages.std() + 1e-08))
-        policy_loss = -(standardized_adv * log_probs).mean()
-        value_loss = torch.square(advantages).mean()
+        policy_loss = -(gaes * log_probs).mean()
+        value_loss = self._mse_loss(v_targets, v_preds)
         entropy = distributions.entropy().mean()
         loss = policy_loss + VALUE_SCALE * value_loss - ENTROPY_SCALE * entropy
 
@@ -80,3 +82,6 @@ class A3C:
         )
 
         return result
+
+    def sync_network(self, global_network):
+        self._local_network.load_state_dict(global_network.state_dict())
