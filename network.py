@@ -16,7 +16,8 @@ class ActorCriticNetwork(nn.Module):
         self.critic = nn.Sequential(
             nn.Linear(4, 4),
             nn.ReLU(),
-            nn.Linear(4, 1)
+            nn.Linear(4, 1),
+            nn.ReLU()
         )
 
     def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:

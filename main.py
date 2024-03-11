@@ -1,4 +1,4 @@
-import multiprocessing as mp
+from torch import multiprocessing as mp
 
 from network import ActorCriticNetwork
 from train import train
@@ -19,3 +19,4 @@ if __name__ == '__main__':
 
     for idx, worker in enumerate(workers):
         worker.join()
+

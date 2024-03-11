@@ -1,4 +1,3 @@
-import numpy as np
 import gymnasium as gym
 from torch.utils.tensorboard import SummaryWriter
 
@@ -15,10 +14,9 @@ def train(global_network, total_step_max: int, step_max: int):
     episode = 0
     episode_return = 0
     state, _ = env.reset()
+    a3c.sync_network()
 
     while total_step < total_step_max:
-        a3c.sync_network(global_network)
-
         action = a3c.get_action(state)[0]
         next_state, reward, terminated, truncated, _ = env.step(action)
         a3c.replay.add_experience(state, action, reward, next_state, terminated or truncated)
@@ -28,6 +26,7 @@ def train(global_network, total_step_max: int, step_max: int):
             result = a3c.train()
             for tag, value in result:
                 writer.add_scalar(f'loss/{tag}', value, total_step)
+            a3c.sync_network()
 
         if terminated or truncated:
             writer.add_scalar('return/return', episode_return, episode)

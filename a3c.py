@@ -6,7 +6,6 @@ from torch.distributions.categorical import Categorical
 from experience_replay import OnPolicyExperienceReplay
 from network import ActorCriticNetwork
 
-STEP_MAX = 10000
 GAMMA = 0.99
 LAMBDA = 0.95
 LEARNING_RATE = 1e-4
@@ -55,8 +54,9 @@ class A3C:
 
         return gaes, v_targets
 
-    def train(self):
+    def train(self) -> tuple:
         batch = self.replay.sample()
+        self._optimizer.zero_grad()
 
         policies, v_preds = self._local_network(batch['states'])
         distributions = Categorical(policies)
@@ -68,14 +68,15 @@ class A3C:
         entropy = distributions.entropy().mean()
         loss = policy_loss + VALUE_SCALE * value_loss - ENTROPY_SCALE * entropy
 
-        self._optimizer.zero_grad()
         loss.backward()
         for global_param, local_param in zip(self._global_network.parameters(), self._local_network.parameters()):
             global_param._grad = local_param.grad
-            self._optimizer.step()
+        self._optimizer.step()
 
         result = (
             ('loss', loss.item()),
+            ('gaes', gaes.mean().item()),
+            ('log_probs', log_probs.mean().item()),
             ('policy_loss', policy_loss.item()),
             ('value_loss', value_loss.item()),
             ('entropy', entropy.item())
@@ -83,5 +84,5 @@ class A3C:
 
         return result
 
-    def sync_network(self, global_network):
-        self._local_network.load_state_dict(global_network.state_dict())
+    def sync_network(self):
+        self._local_network.load_state_dict(self._global_network.state_dict())
