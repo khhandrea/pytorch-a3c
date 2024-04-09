@@ -8,8 +8,7 @@ def train(global_network, total_step_max: int, step_max: int):
     a3c = A3C(global_network)
     writer = SummaryWriter()
 
-    total_step = 0
-    start_step = 0
+    total_step = 1
 
     episode = 0
     episode_return = 0
@@ -22,7 +21,7 @@ def train(global_network, total_step_max: int, step_max: int):
         a3c.replay.add_experience(state, action, reward, next_state, terminated or truncated)
         episode_return += reward
 
-        if (total_step - start_step == step_max) or (terminated or truncated):
+        if (total_step % step_max) == 0:
             result = a3c.train()
             for tag, value in result:
                 writer.add_scalar(f'loss/{tag}', value, total_step)

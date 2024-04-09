@@ -23,6 +23,6 @@ class ActorCriticNetwork(nn.Module):
     def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
         x = self.head(x)
         policy = self.actor(x)
-        value = self.critic(x)
+        value = self.critic(x).squeeze(1)
 
         return policy, value
