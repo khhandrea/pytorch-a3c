@@ -12,14 +12,13 @@ class OnPolicyExperienceReplay():
             setattr(self, k, [])
         self._size = 0
 
-    def add_experience(
-            self, 
-            state: np.ndarray,
-            action: int,
-            reward: float,
-            next_state: np.ndarray,
-            done: bool
-        ) -> None:
+    def add_experience(self,
+                       state: np.ndarray,
+                       action: int,
+                       reward: float,
+                       next_state: np.ndarray,
+                       done: bool
+                       ) -> None:
         most_recent = (state, action, reward, next_state, done)
         for idx, key in enumerate(self._keys):
             getattr(self, key).append(most_recent[idx])

@@ -25,7 +25,6 @@ def train(global_network, total_step_max: int, step_max: int):
             result = a3c.train()
             for tag, value in result:
                 writer.add_scalar(f'loss/{tag}', value, total_step)
-            a3c.sync_network()
 
         if terminated or truncated:
             writer.add_scalar('return/return', episode_return, episode)

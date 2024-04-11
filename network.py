@@ -4,19 +4,17 @@ class ActorCriticNetwork(nn.Module):
     def __init__(self):
         super().__init__()
         self.head = nn.Sequential(
-            nn.Linear(4, 4),
+            nn.Linear(4, 256),
             nn.ReLU(),
         )
 
         self.actor = nn.Sequential(
-            nn.Linear(4, 2),
+            nn.Linear(256, 2),
             nn.Softmax(dim=1)
         )
 
         self.critic = nn.Sequential(
-            nn.Linear(4, 4),
-            nn.ReLU(),
-            nn.Linear(4, 1),
+            nn.Linear(256, 1),
             nn.ReLU()
         )
 

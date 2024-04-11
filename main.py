@@ -5,7 +5,7 @@ from train import train
 
 STEP_MAX = 5000000
 BATCH_SIZE = 128
-CPU_NUM = 2 # mp.cpu_count()
+CPU_NUM = 1 # mp.cpu_count()
 
 if __name__ == '__main__':
     mp.set_start_method('spawn')
