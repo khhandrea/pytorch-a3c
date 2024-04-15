@@ -40,7 +40,7 @@ class A3C:
     def _get_advs_target(self, batch, v_preds):
         with torch.no_grad():
             last_v_pred = self._local_network.value(batch['next_states'][-1:])
-        returns = calc_returns(batch['rewards'], batch['dones'], v_preds, GAMMA)
+        returns = calc_returns(batch['rewards'], batch['dones'], last_v_pred, GAMMA)
         advantages = returns - v_preds
         return advantages, returns
 
