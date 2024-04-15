@@ -18,9 +18,12 @@ class ActorCriticNetwork(nn.Module):
             nn.ReLU()
         )
 
-    def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
+    def policy(self, x: Tensor) -> Tensor:
         x = self.head(x)
         policy = self.actor(x)
-        value = self.critic(x).squeeze(1)
+        return policy
 
-        return policy, value
+    def value(self, x: Tensor) -> Tensor:
+        x = self.head(x)
+        value = self.critic(x)
+        return value.squeeze()

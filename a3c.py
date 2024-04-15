@@ -6,15 +6,14 @@ from torch.distributions.categorical import Categorical
 
 from experience_replay import OnPolicyExperienceReplay
 from network import ActorCriticNetwork
-from utils import calc_gaes, calc_nstep_returns, calc_td_returns
+from utils import calc_returns, calc_gaes
 
 GAMMA = 0.99
 LAMBDA = 0.95
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-3
 
-REWARD_SCALE = 0.01
 POLICY_SCALE = 1.
-VALUE_SCALE = 5.
+VALUE_SCALE = 1.
 ENTROPY_SCALE = 0.0
 
 class A3C:
@@ -25,59 +24,37 @@ class A3C:
         self._optimizer = optim.Adam(self._global_network.parameters(), lr=LEARNING_RATE)
 
     def get_action(self, observation: np.ndarray):
-        observation_tensor = tensor(observation).view(1, -1)
-        policy, _ = self._local_network(observation_tensor)
-        distribution = Categorical(policy)
-        action = distribution.sample()
+        observation_tensor = tensor(observation, dtype=torch.float32).unsqueeze(0)
+        policy = self._local_network.policy(observation_tensor)
+        action = Categorical(policy).sample().item()
+        return action
 
-        return action.numpy()
-    
-
-    def _get_gaes_v_targets(self, batch, v_preds):
-        last_next_state = batch['next_states'][-1].unsqueeze(0)
+    def _get_gaes_target(self, batch, v_preds):
         with torch.no_grad():
-            _, last_v_pred = self._local_network(last_next_state)
+            last_v_pred = self._local_network.value(batch['next_states'][-1:]).unsqueeze(0)
         v_preds_all = torch.cat((v_preds, last_v_pred), dim=0)
+        gaes = calc_gaes(batch['rewards'], batch['dones'], v_preds_all, GAMMA, LAMBDA)
+        v_target = gaes + v_preds
+        return gaes, v_target
 
-        gaes, returns = calc_gaes(batch['rewards'], batch['dones'], v_preds_all, GAMMA, LAMBDA)
-        # v_targets = gaes + v_preds
-        v_targets = returns
-
-        # Standardize
-        if len(gaes) > 1:
-            gaes = torch.squeeze((gaes - gaes.mean()) / (gaes.std() + 1e-8))
-
-        return gaes, v_targets
-
-    
-    def _get_nstep_advs_v_target(self, batch, v_preds):
-        last_next_state = batch['next_states'][-1].unsqueeze(0)
+    def _get_advs_target(self, batch, v_preds):
         with torch.no_grad():
-            _, last_v_pred = self._local_network(last_next_state)
-        returns = calc_nstep_returns(batch['rewards'], batch['dones'], last_v_pred, len(batch['rewards']), GAMMA)
-        advs = returns - v_preds
-        v_targets = returns
+            last_v_pred = self._local_network.value(batch['next_states'][-1:])
+        returns = calc_returns(batch['rewards'], batch['dones'], v_preds, GAMMA)
+        advantages = returns - v_preds
+        return advantages, returns
 
-        return advs, v_targets
-    
-    def _get_tds_v_target(self, batch, v_preds):
-        _, v_preds = self._local_network(batch['states'])
-        _, next_v_preds = self._local_network(batch['next_states'])
-        returns = calc_td_returns(batch['rewards'], batch['dones'], next_v_preds.detach(), GAMMA)
-        targets = (batch['rewards'] + GAMMA * next_v_preds.detach() * (1 - batch['dones'])).to(torch.float32)
-        advantages = targets - v_preds.detach()
-        return advantages, targets
+    def sync_network(self):
+        self._local_network.load_state_dict(self._global_network.state_dict())
 
-    def train(self) -> tuple:
+    def train(self) -> tuple[float]:
         batch = self.replay.sample()
-
-        policies, v_preds = self._local_network(batch['states'])
-
+        policies = self._local_network.policy(batch['states'])
+        v_preds = self._local_network.value(batch['states'])
         distributions = Categorical(policies)
         log_probs = distributions.log_prob(batch['actions'])
-        # advs, v_targets = self._get_gaes_v_targets(batch, v_preds.detach())
-        # advs, v_targets = self._get_nstep_advs_v_target(batch, v_preds.detach())
-        advs, v_targets = self._get_tds_v_target(batch, v_preds.detach())
+        # advs, v_targets = self._get_advs_target(batch, v_preds.detach())
+        advs, v_targets = self._get_gaes_target(batch, v_preds.detach())
 
         policy_loss = -(advs * log_probs).mean()
         value_loss = F.mse_loss(v_preds, v_targets)
@@ -95,7 +72,8 @@ class A3C:
         self._optimizer.step()
         self.sync_network()
 
-        result = (('loss', loss.item()),
+        result = (
+            ('loss', loss.item()),
             ('gaes', advs.mean().item()),
             ('log_probs', log_probs.mean().item()),
             ('policy_loss', policy_loss.item()),
@@ -105,6 +83,3 @@ class A3C:
         )
 
         return result
-
-    def sync_network(self):
-        self._local_network.load_state_dict(self._global_network.state_dict())
